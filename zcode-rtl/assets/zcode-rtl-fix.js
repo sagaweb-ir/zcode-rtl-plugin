@@ -1,5 +1,11 @@
 /*
- * ZCode RTL fix v30 — Persian RTL + Vazirmatn font, English/code/tool blocks LTR.
+ * ZCode RTL fix v31 — Persian RTL + Vazirmatn font + scaled headings.
+ *
+ * v31 — heading sizes: the app renders every markdown heading at body size
+ *   (h1-h6 all computed 16px, only weight differs), so titles do not stand
+ *   out. Headings INSIDE the chat transcript now get an em-based scale
+ *   (h1 1.6em → h6 1em). App-chrome headings outside the chat scope are
+ *   never touched.
  *
  * v30 — Vazirmatn font: Persian-dominant text, lists, tables and
  *   input fields now also get font-family Vazirmatn (falls back to the
@@ -186,6 +192,24 @@
       force(zone, { 'direction': 'ltr', 'text-align': 'left' });
     });
     root.querySelectorAll(TOOL_MARK).forEach((m) => force(m, LTR_TEXT));
+  }
+
+  // v31: the app's markdown style renders ALL headings at body size (h1-h6
+  // all 16px computed), so titles don't stand out. Scale headings up with
+  // em multipliers (hierarchy preserved, adapts to any base size). CHAT
+  // SCOPE ONLY — app-chrome headings outside the transcript are never
+  // touched (verified: sidebar/toolbar h1-h3s live outside MSG_SEL).
+  const HEAD_SIZE = { 'h1': '1.6em', 'h2': '1.4em', 'h3': '1.2em',
+                      'h4': '1.1em', 'h5': '1.05em', 'h6': '1em' };
+  function fixHeadingSizes(root) {
+    root = root || document;
+    for (const tag in HEAD_SIZE) {
+      root.querySelectorAll(tag).forEach((h) => {
+        if (isExcluded(h)) return;
+        if (h.closest && (h.closest('pre,code') || !h.closest(MSG_SEL))) return;
+        force(h, { 'font-size': HEAD_SIZE[tag] });
+      });
+    }
   }
 
   // True when the text has no Persian/Arabic and is mostly Latin letters.
@@ -470,6 +494,7 @@
     fixUserActions(root);
     fixTableScroll(root);
     fixToolBlocks(root);
+    fixHeadingSizes(root);
     // v27 REPAIR: an earlier pass (or an older payload version) may have put
     // inline rtl/right on layout wrappers that CONTAIN the sidebar while
     // sitting outside the chat scope — that reorders the app layout AND its
@@ -551,7 +576,7 @@
       window.__zcodeRtlObserver = obs;
     }
 
-    console.log('[ZCode RTL v30] applied (Persian text in Vazirmatn). Toggle: /rtl-fix off|on (instant) — window.__zcodeRtlSetEnabled(bool). Persian RTL; tool-block chrome LTR with Persian prose RTL inside; sidebar untouched.');
+    console.log('[ZCode RTL v31] applied (Persian text in Vazirmatn, scaled headings). Toggle: /rtl-fix off|on (instant) — window.__zcodeRtlSetEnabled(bool). Persian RTL; tool-block chrome LTR with Persian prose RTL inside; sidebar untouched.');
   }
 
   // v29: persistent on/off switch. '0' in localStorage disables the layer
