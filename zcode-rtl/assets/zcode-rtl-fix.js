@@ -1,5 +1,10 @@
 /*
- * ZCode RTL fix v29 — Persian RTL, English/code/tool blocks LTR.
+ * ZCode RTL fix v30 — Persian RTL + Vazirmatn font, English/code/tool blocks LTR.
+ *
+ * v30 — Vazirmatn font: Persian-dominant text, lists, tables and
+ *   input fields now also get font-family Vazirmatn (falls back to the
+ *   legacy "Vazir" / generic sans-serif when the font is not installed).
+ *   Latin-only text, code blocks and tool chrome keep the app font.
  *
  * v29 (toggle while working, debug port off by default):
  *   - The payload now respects a persistent switch:
@@ -111,19 +116,27 @@
   // Persian/Arabic detection: Arabic block + supplements + presentation forms.
   const PERSIAN = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
+  // v30: Persian-dominant text renders in Vazirmatn (locally installed);
+  // falls back to the legacy "Vazir" or generic sans-serif if absent.
+  const FONT = "'Vazirmatn', 'Vazir', sans-serif";
+
   // Forced RTL: `embed` (NOT `plaintext`) so the browser cannot re-resolve
   // the direction from content and override our explicit rtl.
-  const RTL_FORCE = { 'direction': 'rtl', 'text-align': 'right', 'unicode-bidi': 'embed' };
+  const RTL_FORCE = { 'direction': 'rtl', 'text-align': 'right', 'unicode-bidi': 'embed',
+                      'font-family': FONT };
   const RTL_LIST  = { 'direction': 'rtl', 'text-align': 'right', 'unicode-bidi': 'embed',
                       'padding-left': '0', 'padding-right': '1.5em',
-                      'margin-left': '0', 'margin-right': '0' };
+                      'margin-left': '0', 'margin-right': '0',
+                      'font-family': FONT };
   const LTR_TEXT  = { 'direction': 'ltr', 'text-align': 'left',  'unicode-bidi': 'embed' };
   // Tables go FULLY RTL (v16 decision, kept): first column at the RIGHT,
   // everything right-aligned; Latin tokens stay intact as embedded LTR runs.
   const RTL_TABLE = { 'direction': 'rtl', 'text-align': 'right', 'unicode-bidi': 'embed',
-                      'overflow-wrap': 'break-word' };
+                      'overflow-wrap': 'break-word',
+                      'font-family': FONT };
   const NEUTRAL   = { 'direction': 'auto', 'text-align': 'start', 'unicode-bidi': 'plaintext' };
-  const RTL_INPUT = { 'direction': 'auto', 'text-align': 'start', 'unicode-bidi': 'plaintext' };
+  const RTL_INPUT = { 'direction': 'auto', 'text-align': 'start', 'unicode-bidi': 'plaintext',
+                      'font-family': FONT };
 
   const MSG_SEL = '[class*="message" i],[class*="Message" i],[class*="chat" i],[class*="Chat" i],' +
                   '[class*="bubble" i],[class*="Bubble" i],[class*="msg" i],[class*="Msg" i],' +
@@ -538,7 +551,7 @@
       window.__zcodeRtlObserver = obs;
     }
 
-    console.log('[ZCode RTL v29] applied. Toggle: /rtl-fix off|on (instant) — window.__zcodeRtlSetEnabled(bool). Persian RTL; tool-block chrome LTR with Persian prose RTL inside; sidebar untouched.');
+    console.log('[ZCode RTL v30] applied (Persian text in Vazirmatn). Toggle: /rtl-fix off|on (instant) — window.__zcodeRtlSetEnabled(bool). Persian RTL; tool-block chrome LTR with Persian prose RTL inside; sidebar untouched.');
   }
 
   // v29: persistent on/off switch. '0' in localStorage disables the layer
