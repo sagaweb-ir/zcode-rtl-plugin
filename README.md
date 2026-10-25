@@ -19,6 +19,7 @@
 | Element | Behavior |
 |---|---|
 | Persian text in chat | RTL, right-aligned (ratio-based, so mostly-English "thinking" blocks stay LTR) |
+| Font | Persian-dominant text, lists, tables and input fields render in **Vazirmatn** (graceful fallback to "Vazir"/sans-serif when not installed); code and Latin-only text keep the app font |
 | Code blocks, terminal commands | LTR, untouched |
 | Tool blocks (terminal / thinking / edit) | Block chrome and layout stay LTR; Persian prose inside the body is RTL |
 | Tables | Fully RTL (first column at the right), values wrap instead of overflowing |
@@ -31,6 +32,7 @@ The payload self-heals while the model is streaming (debounced 200 ms rescan), s
 
 - **ZCode Desktop** (Windows instructions below; the injector itself also works on macOS/Linux — see [Manual setup](#manual-setup))
 - **Node.js ≥ 22** (`node --version` to check)
+- **Vazirmatn font** (optional) — if you want Persian text in [Vazirmatn](https://github.com/rastikerdar/vazirmatn), install it for your user (no admin needed); without it everything still works, just with the default font.
 
 ## Installation (2 steps)
 
@@ -61,7 +63,7 @@ Type `/rtl-fix` in the ZCode chat (the plugin ships this slash command):
 
 Under the hood the toggle is `localStorage["zcodeRtl:enabled"]` plus an in-page switch (`window.__zcodeRtlSetEnabled(true|false)`), so it survives page reloads and needs no app restart — except the single restart that opens the port the first time.
 
-Your ZCode shortcuts are never modified. If you prefer the *always-on* style instead, you can add ` --remote-debugging-port=9222` to your ZCode shortcut's Target once — then RTL comes back automatically in every new session via the SessionStart hook.
+When `/rtl-fix on` restarts ZCode with the debug port, the restart script also adds `--remote-debugging-port=9222` to your ZCode shortcuts (Start Menu, taskbar pin, desktop), so the port — and with it the RTL layer — survive manual app restarts too. `/rtl-fix off hard` strips the flag back out and restores the default shortcuts. (Without this, reopening ZCode from a pinned shortcut after enabling would silently lose the port and the RTL layer with it.)
 
 ## Manual setup
 
