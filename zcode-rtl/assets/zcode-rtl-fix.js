@@ -1,5 +1,15 @@
 /*
- * ZCode RTL fix v32 — Persian RTL + Vazirmatn font + scaled headings.
+ * ZCode RTL fix v33 — Persian RTL + Vazirmatn font + scaled headings.
+ *
+ * v33 (merge): reload-free toggle both ways from upstream v30 — force()
+ *   records every element+property in a TOUCHED map so disabling via
+ *   __zcodeRtlSetEnabled(false) strips exactly those inline styles and
+ *   disconnects the observer (no page reload, no blink). Mirrored arrows
+ *   (v32) are restored on disable too, so a disabled page is fully clean.
+ *   A stale observer from a previous payload evaluation is disconnected
+ *   and replaced at (re)inject time so the newest closure always owns
+ *   cleanup. Our v30-v32 features (Vazirmatn font, heading scale, arrow
+ *   mirroring) ride on top unchanged.
  *
  * v32 — mirrored arrows: in an RTL paragraph "A → B" renders with A on the
  *   RIGHT and B on the LEFT, so the unmirrored → glyph points backwards
@@ -122,10 +132,18 @@
  *   - sidebar (#sidebar, *sidebar*) -> COMPLETELY UNTOUCHED
  *   - debounced 200 ms rescan after streaming mutations
  */
-(function zcodeRtlFixV29() {
+(function zcodeRtlFixV33() {
+  // Every element+property we set, so disable() can strip them without a
+  // page reload (upstream v30).
+  const TOUCHED = new Map();
   function force(el, props) {
     if (!el || el.nodeType !== 1) return;
-    for (const k in props) el.style.setProperty(k, props[k], 'important');
+    let rec = TOUCHED.get(el);
+    if (!rec) { rec = new Set(); TOUCHED.set(el, rec); }
+    for (const k in props) {
+      rec.add(k);
+      el.style.setProperty(k, props[k], 'important');
+    }
   }
 
   // Persian/Arabic detection: Arabic block + supplements + presentation forms.
@@ -231,6 +249,8 @@
                        '\u21D2': '\u21D0', '\u21D0': '\u21D2',
                        '\u27F6': '\u27F5', '\u27F5': '\u27F6' };
   const ARROW_RE = /[\u2190\u2192\u21D0\u21D2\u27F5\u27F6]/;
+  // Flipped text nodes, so disable() can restore the original glyphs (v33).
+  const FLIPPED = [];
   function fixArrowMirrors(root) {
     root = root || document;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
@@ -238,7 +258,13 @@
     while ((tn = walker.nextNode())) {
       const data = tn.data;
       if (!data || !ARROW_RE.test(data)) continue;
-      if (tn.__zcodeRtlArrowsLast === data) continue; // flipped, unchanged since
+      if (tn.__zcodeRtlArrowsLast === data) {
+        // Already flipped, unchanged since. Register it anyway: nodes flipped
+        // by a PREVIOUS payload evaluation carry the marker but were never
+        // added to this closure's FLIPPED list (v33).
+        if (FLIPPED.indexOf(tn) < 0) FLIPPED.push(tn);
+        continue;
+      }
       const host = tn.parentElement;
       if (!host || host.closest('pre,code')) continue;
       if (isExcluded(host)) continue;
@@ -247,6 +273,7 @@
       for (const ch of data) flipped += (ARROW_SWAP[ch] || ch);
       tn.data = flipped;
       tn.__zcodeRtlArrowsLast = flipped;
+      if (FLIPPED.indexOf(tn) < 0) FLIPPED.push(tn);
     }
   }
 
@@ -615,33 +642,63 @@
       window.__zcodeRtlObserver = obs;
     }
 
-    console.log('[ZCode RTL v32] applied (Persian text in Vazirmatn, scaled headings, mirrored arrows in RTL text). Toggle: /rtl-fix off|on (instant) — window.__zcodeRtlSetEnabled(bool). Persian RTL; tool-block chrome LTR with Persian prose RTL inside; sidebar untouched.');
+    console.log('[ZCode RTL v33] applied (Persian text in Vazirmatn, scaled headings, mirrored arrows in RTL text). Toggle: /rtl-fix off|on — reload-free both ways. Persian RTL; tool-block chrome LTR with Persian prose RTL inside; sidebar untouched.');
   }
 
-  // v29: persistent on/off switch. '0' in localStorage disables the layer
-  // completely; enabling again is instant (start() without a reload).
+  // v29: persistent on/off switch. '0' in localStorage disables the layer.
+  // v33: disabling strips exactly the styles we set — no page reload.
   const LS_KEY = 'zcodeRtl:enabled';
   function rtlEnabled() {
     try { return localStorage.getItem(LS_KEY) !== '0'; } catch (e) { return true; }
+  }
+  function stripAll() {
+    for (const [el, props] of TOUCHED) {
+      try {
+        for (const k of props) el.style.removeProperty(k);
+        if (el.style && el.style.length === 0) el.removeAttribute('style');
+      } catch (e) { /* detached node — ignore */ }
+    }
+    TOUCHED.clear();
+  }
+  function restoreArrows() {
+    for (const tn of FLIPPED) {
+      try {
+        if (tn.__zcodeRtlArrowsLast !== undefined && tn.data === tn.__zcodeRtlArrowsLast) {
+          let back = '';
+          for (const ch of tn.data) back += (ARROW_SWAP[ch] || ch);
+          tn.data = back;
+        }
+        tn.__zcodeRtlArrowsLast = undefined;
+      } catch (e) { /* detached node — ignore */ }
+    }
+    FLIPPED.length = 0;
+  }
+  function stopObserver() {
+    if (window.__zcodeRtlObserver) {
+      try { window.__zcodeRtlObserver.disconnect(); } catch (e) { /* noop */ }
+      window.__zcodeRtlObserver = null;
+    }
   }
   window.__zcodeRtlSetEnabled = function (v) {
     try { localStorage.setItem(LS_KEY, v ? '1' : '0'); } catch (e) { /* storage blocked */ }
     if (v) {
       if (!window.__zcodeRtlObserver) start();
-      console.log('[ZCode RTL v29] enabled.');
+      console.log('[ZCode RTL v33] enabled.');
     } else {
-      // Clean slate: a fresh renderer has none of our inline styles and no
-      // observer, and nothing re-injects until the payload is evaluated again.
-      location.reload();
+      try { stripAll(); restoreArrows(); } catch (e) { /* nothing touched */ }
+      stopObserver();
+      window.__zcodeRtlProcess = null;
+      console.log('[ZCode RTL v33] disabled — styles stripped, no reload.');
     }
   };
 
   if (!rtlEnabled()) {
-    console.log('[ZCode RTL v29] disabled (localStorage zcodeRtl:enabled=0). Enable with window.__zcodeRtlSetEnabled(true) or /rtl-fix on.');
+    console.log('[ZCode RTL v33] disabled (localStorage zcodeRtl:enabled=0). Enable with window.__zcodeRtlSetEnabled(true) or /rtl-fix on.');
     return;
   }
 
   if (document.body) {
+    stopObserver(); // a previous evaluation's closure must not survive (upstream v30)
     start();
   } else {
     document.addEventListener('DOMContentLoaded', function () {
