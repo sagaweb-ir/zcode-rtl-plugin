@@ -21,6 +21,7 @@
 | Persian text in chat | RTL, right-aligned (ratio-based, so mostly-English "thinking" blocks stay LTR) |
 | Font | Persian-dominant text, lists, tables and input fields render in **Vazirmatn** (graceful fallback to "Vazir"/sans-serif when not installed); code and Latin-only text keep the app font |
 | Headings | Markdown headings scale up (h1 1.6em → h6 1em) instead of all rendering at body size; chat scope only, app chrome untouched |
+| Arrows | Directional arrows (→ ← ⇒ ⇐) in RTL text are mirrored so they point the way the sentence reads; symmetric arrows (↔), code blocks and Latin text untouched |
 | Code blocks, terminal commands | LTR, untouched |
 | Tool blocks (terminal / thinking / edit) | Block chrome and layout stay LTR; Persian prose inside the body is RTL |
 | Tables | Fully RTL (first column at the right), values wrap instead of overflowing |
