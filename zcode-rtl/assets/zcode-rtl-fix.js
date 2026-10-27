@@ -1,5 +1,14 @@
 /*
- * ZCode RTL fix v31 — Persian RTL + Vazirmatn font + scaled headings.
+ * ZCode RTL fix v32 — Persian RTL + Vazirmatn font + scaled headings.
+ *
+ * v32 — mirrored arrows: in an RTL paragraph "A → B" renders with A on the
+ *   RIGHT and B on the LEFT, so the unmirrored → glyph points backwards
+ *   (at the source A, against the reading direction). Directional arrows
+ *   (→ ← ⇒ ⇐ ⟶ ⟵) in RTL-rendered text are now swapped so each arrow
+ *   points the way the sentence reads; symmetric arrows (↔ ⇔) and any
+ *   arrow inside code blocks / LTR text are untouched. Idempotent across
+ *   the 200 ms rescans: a flipped text node remembers the string it now
+ *   holds, so a pass re-flips only after React actually rewrote the node.
  *
  * v31 — heading sizes: the app renders every markdown heading at body size
  *   (h1-h6 all computed 16px, only weight differs), so titles do not stand
@@ -209,6 +218,35 @@
         if (h.closest && (h.closest('pre,code') || !h.closest(MSG_SEL))) return;
         force(h, { 'font-size': HEAD_SIZE[tag] });
       });
+    }
+  }
+
+  // v32: mirror directional arrows inside RTL-rendered text. In an rtl
+  // paragraph the bidi layout puts the source token on the RIGHT and the
+  // target on the LEFT, so an unmirrored → visually points at the source —
+  // backwards. Swapping the glyph makes the arrow follow the reading flow.
+  // Only elements WE rtl'd are affected (checked via computed direction),
+  // so code blocks, Latin paragraphs and app chrome keep native arrows.
+  const ARROW_SWAP = { '\u2192': '\u2190', '\u2190': '\u2192',
+                       '\u21D2': '\u21D0', '\u21D0': '\u21D2',
+                       '\u27F6': '\u27F5', '\u27F5': '\u27F6' };
+  const ARROW_RE = /[\u2190\u2192\u21D0\u21D2\u27F5\u27F6]/;
+  function fixArrowMirrors(root) {
+    root = root || document;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    let tn;
+    while ((tn = walker.nextNode())) {
+      const data = tn.data;
+      if (!data || !ARROW_RE.test(data)) continue;
+      if (tn.__zcodeRtlArrowsLast === data) continue; // flipped, unchanged since
+      const host = tn.parentElement;
+      if (!host || host.closest('pre,code')) continue;
+      if (isExcluded(host)) continue;
+      if (getComputedStyle(host).direction !== 'rtl') continue;
+      let flipped = '';
+      for (const ch of data) flipped += (ARROW_SWAP[ch] || ch);
+      tn.data = flipped;
+      tn.__zcodeRtlArrowsLast = flipped;
     }
   }
 
@@ -495,6 +533,7 @@
     fixTableScroll(root);
     fixToolBlocks(root);
     fixHeadingSizes(root);
+    fixArrowMirrors(root);
     // v27 REPAIR: an earlier pass (or an older payload version) may have put
     // inline rtl/right on layout wrappers that CONTAIN the sidebar while
     // sitting outside the chat scope — that reorders the app layout AND its
@@ -576,7 +615,7 @@
       window.__zcodeRtlObserver = obs;
     }
 
-    console.log('[ZCode RTL v31] applied (Persian text in Vazirmatn, scaled headings). Toggle: /rtl-fix off|on (instant) — window.__zcodeRtlSetEnabled(bool). Persian RTL; tool-block chrome LTR with Persian prose RTL inside; sidebar untouched.');
+    console.log('[ZCode RTL v32] applied (Persian text in Vazirmatn, scaled headings, mirrored arrows in RTL text). Toggle: /rtl-fix off|on (instant) — window.__zcodeRtlSetEnabled(bool). Persian RTL; tool-block chrome LTR with Persian prose RTL inside; sidebar untouched.');
   }
 
   // v29: persistent on/off switch. '0' in localStorage disables the layer
