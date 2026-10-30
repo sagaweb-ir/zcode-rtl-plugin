@@ -1,5 +1,16 @@
 /*
- * ZCode RTL fix v33 — Persian RTL + Vazirmatn font + scaled headings.
+ * ZCode RTL fix v34 — Persian RTL + Vazirmatn font + scaled headings.
+ *
+ * v34 — app-3.17 selector repair: the updated app wraps the whole chat
+ *   transcript in rows whose arbitrary Tailwind classes contain
+ *   "[data-zcode-chat-loading-slot]" — the substring "code" (inside
+ *   "zcode") made isCode() classify the transcript wrapper as a code
+ *   block, locking the ENTIRE assistant chat LTR and stopping the walk
+ *   before any paragraph was styled (user turns live in sibling rows and
+ *   kept working, which is why the breakage looked partial). isCode() now
+ *   matches whole class TOKENS starting with "code" (or code-block
+ *   compounds) and the code-lock pass re-verifies with isCode() instead
+ *   of trusting the [class*="code"] prefilter.
  *
  * v33 (merge): reload-free toggle both ways from upstream v30 — force()
  *   records every element+property in a TOUCHED map so disabling via
@@ -132,7 +143,7 @@
  *   - sidebar (#sidebar, *sidebar*) -> COMPLETELY UNTOUCHED
  *   - debounced 200 ms rescan after streaming mutations
  */
-(function zcodeRtlFixV33() {
+(function zcodeRtlFixV34() {
   // Every element+property we set, so disable() can strip them without a
   // page reload (upstream v30).
   const TOUCHED = new Map();
@@ -197,7 +208,20 @@
 
   function isCode(el) {
     const t = (el.tagName || '').toLowerCase();
-    return t === 'pre' || t === 'code' || /code/i.test(el.className || '');
+    if (t === 'pre' || t === 'code') return true;
+    // Whole-TOKEN match only (v34): the app (3.17+) wraps the whole
+    // transcript in rows whose arbitrary Tailwind classes contain
+    // "[data-zcode-chat-loading-slot]" — a SUBSTRING "code" (zcode) match
+    // there locked the entire chat LTR as a "code block". Match class tokens
+    // that START with "code" (code, code-block, CodeBlock) or contain
+    // code-block/codeblock compounds instead.
+    const cls = String(el.className || '');
+    if (/code[-_]?block/i.test(cls)) return true;
+    const toks = cls.toLowerCase().split(/\s+/);
+    for (let i = 0; i < toks.length; i++) {
+      if (toks[i].indexOf('code') === 0) return true;
+    }
+    return false;
   }
 
   // Tool blocks (terminal / thinking / edit): the block CHROME (summary
@@ -546,8 +570,11 @@
     });
     root.querySelectorAll('textarea,input,[contenteditable="true"],[contenteditable=""]')
          .forEach((e) => { if (!isExcluded(e)) force(e, RTL_INPUT); });
+    // v34: the [class*="code" i] prefilter also catches arbitrary Tailwind
+    // classes containing "zcode" — re-verify with the token-based isCode()
+    // before locking, so the transcript wrapper is never treated as code.
     root.querySelectorAll('pre,code,[class*="code" i]')
-         .forEach((e) => { if (!isExcluded(e)) force(e, LTR_TEXT); });
+         .forEach((e) => { if (!isExcluded(e) && isCode(e)) force(e, LTR_TEXT); });
   }
 
   function process(root) {
@@ -642,7 +669,7 @@
       window.__zcodeRtlObserver = obs;
     }
 
-    console.log('[ZCode RTL v33] applied (Persian text in Vazirmatn, scaled headings, mirrored arrows in RTL text). Toggle: /rtl-fix off|on — reload-free both ways. Persian RTL; tool-block chrome LTR with Persian prose RTL inside; sidebar untouched.');
+    console.log('[ZCode RTL v34] applied (Persian text in Vazirmatn, scaled headings, mirrored arrows in RTL text; app-3.17 zcode-class fix). Toggle: /rtl-fix off|on — reload-free both ways.');
   }
 
   // v29: persistent on/off switch. '0' in localStorage disables the layer.
@@ -683,17 +710,17 @@
     try { localStorage.setItem(LS_KEY, v ? '1' : '0'); } catch (e) { /* storage blocked */ }
     if (v) {
       if (!window.__zcodeRtlObserver) start();
-      console.log('[ZCode RTL v33] enabled.');
+      console.log('[ZCode RTL v34] enabled.');
     } else {
       try { stripAll(); restoreArrows(); } catch (e) { /* nothing touched */ }
       stopObserver();
       window.__zcodeRtlProcess = null;
-      console.log('[ZCode RTL v33] disabled — styles stripped, no reload.');
+      console.log('[ZCode RTL v34] disabled — styles stripped, no reload.');
     }
   };
 
   if (!rtlEnabled()) {
-    console.log('[ZCode RTL v33] disabled (localStorage zcodeRtl:enabled=0). Enable with window.__zcodeRtlSetEnabled(true) or /rtl-fix on.');
+    console.log('[ZCode RTL v34] disabled (localStorage zcodeRtl:enabled=0). Enable with window.__zcodeRtlSetEnabled(true) or /rtl-fix on.');
     return;
   }
 
