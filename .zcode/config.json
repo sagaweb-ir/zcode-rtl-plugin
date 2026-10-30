@@ -1,0 +1,7 @@
+{
+  "plugins": {
+    "enabledPlugins": {
+      "zcode-rtl@zcode-rtl-plugin": true
+    }
+  }
+}
