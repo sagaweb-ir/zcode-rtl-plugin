@@ -1,5 +1,16 @@
 /*
- * ZCode RTL fix v34 — Persian RTL + Vazirmatn font + scaled headings.
+ * ZCode RTL fix v35 — Persian RTL + Vazirmatn font + scaled headings.
+ *
+ * v35 (merge with upstream v31): adopts upstream's TOKEN-level CODE_TOKEN
+ *   isCode() (delimited-token match + SVG className guard — subsumes our
+ *   v34 token-starts-with variant) and the 3.17.1 tool-block repair:
+ *   .tool-summary/.reasoning marker rows are gone in 3.17.1, so the tool
+ *   LTR lock was silently dead and Persian prose inside tool/agent result
+ *   blocks stayed LTR — [data-slot=collapsible-trigger] is now the chrome
+ *   marker (old markers kept for 3.16.x), scoped by inChat() because
+ *   sidebar project/task rows share that data-slot. Our features (v30-v32
+ *   Vazirmatn font, heading scale, arrow mirroring; v33/v34 reload-free
+ *   disable + strip) ride on top unchanged.
  *
  * v34 — app-3.17 selector repair: the updated app wraps the whole chat
  *   transcript in rows whose arbitrary Tailwind classes contain
@@ -143,7 +154,7 @@
  *   - sidebar (#sidebar, *sidebar*) -> COMPLETELY UNTOUCHED
  *   - debounced 200 ms rescan after streaming mutations
  */
-(function zcodeRtlFixV34() {
+(function zcodeRtlFixV35() {
   // Every element+property we set, so disable() can strip them without a
   // page reload (upstream v30).
   const TOUCHED = new Map();
@@ -206,30 +217,41 @@
     return !!(el.querySelector && el.querySelector(EXCLUDE_SEL));
   }
 
+  // TOKEN-level code detection (upstream v31, adopted in our v35 — replaces
+  // our v34 token-starts-with variant): the host app's own name contains the
+  // substring "code". 3.17.1 introduced <body class="zcode-startup-ready">
+  // and the transcript container [&>[data-zcode-chat-loading-slot]…]:-mt-2,
+  // and a bare /code/i substring test classified both as code blocks — the
+  // body got LTR !important stamped on it (text-align inherits, so every
+  // unstyled descendant rendered left-aligned) while the transcript
+  // container took the code branch and returned early, so no Persian
+  // paragraph below it was ever reached.
+  const CODE_TOKEN = /(?:^|[\s:._/,-])code(?:$|[\s:._/,-])|code[-_]?block/i;
   function isCode(el) {
     const t = (el.tagName || '').toLowerCase();
     if (t === 'pre' || t === 'code') return true;
-    // Whole-TOKEN match only (v34): the app (3.17+) wraps the whole
-    // transcript in rows whose arbitrary Tailwind classes contain
-    // "[data-zcode-chat-loading-slot]" — a SUBSTRING "code" (zcode) match
-    // there locked the entire chat LTR as a "code block". Match class tokens
-    // that START with "code" (code, code-block, CodeBlock) or contain
-    // code-block/codeblock compounds instead.
-    const cls = String(el.className || '');
-    if (/code[-_]?block/i.test(cls)) return true;
-    const toks = cls.toLowerCase().split(/\s+/);
-    for (let i = 0; i < toks.length; i++) {
-      if (toks[i].indexOf('code') === 0) return true;
-    }
-    return false;
+    const cls = typeof el.className === 'string' ? el.className : '';
+    return CODE_TOKEN.test(cls);
   }
 
   // Tool blocks (terminal / thinking / edit): the block CHROME (summary
   // rows, icons, command previews) is always left-to-right, but Persian
   // prose inside the expanded body must still be RTL (v28: v27 over-locked
   // the whole zone and scrambled streamed Persian thinking text).
-  const TOOL_MARK = '[class*="tool-summary"],[class*="reasoning"]';
+  // v35 (upstream v31): 3.17.1 removed the .tool-summary / .reasoning marker
+  // rows (both matched 0 elements, so the tool lock was silently dead —
+  // Persian prose inside tool/agent result blocks stayed LTR). The block
+  // chrome is the shadcn trigger row [data-slot=collapsible-trigger]; the
+  // old markers are kept so the payload still works on 3.16.x. The same
+  // data-slot is also used by sidebar project/task rows, so the
+  // document-wide pass below must stay inside the transcript (v18: the
+  // sidebar is never touched).
+  const TOOL_MARK = '[class*="tool-summary"],[class*="reasoning"],' +
+                    '[data-slot="collapsible-trigger"]';
   const TOOL_ZONE = '[data-slot="collapsible"]:has(' + TOOL_MARK + ')';
+  function inChat(el) {
+    return !!(el.closest && el.closest(MSG_SEL));
+  }
   function isToolZone(el) {
     if (!el.closest) return false;
     return !!el.closest(TOOL_MARK) || !!el.closest(TOOL_ZONE);
@@ -240,9 +262,13 @@
   function fixToolBlocks(root) {
     root = root || document;
     root.querySelectorAll(TOOL_ZONE).forEach((zone) => {
+      if (isExcluded(zone) || !inChat(zone)) return; // sidebar rows share the slot
       force(zone, { 'direction': 'ltr', 'text-align': 'left' });
     });
-    root.querySelectorAll(TOOL_MARK).forEach((m) => force(m, LTR_TEXT));
+    root.querySelectorAll(TOOL_MARK).forEach((m) => {
+      if (isExcluded(m) || !inChat(m)) return;
+      force(m, LTR_TEXT);
+    });
   }
 
   // v31: the app's markdown style renders ALL headings at body size (h1-h6
@@ -669,7 +695,7 @@
       window.__zcodeRtlObserver = obs;
     }
 
-    console.log('[ZCode RTL v34] applied (Persian text in Vazirmatn, scaled headings, mirrored arrows in RTL text; app-3.17 zcode-class fix). Toggle: /rtl-fix off|on — reload-free both ways.');
+    console.log('[ZCode RTL v35] applied (Persian text in Vazirmatn, scaled headings, mirrored arrows; 3.17.1 tool-block lock restored). Toggle: /rtl-fix off|on — reload-free both ways.');
   }
 
   // v29: persistent on/off switch. '0' in localStorage disables the layer.
@@ -710,17 +736,17 @@
     try { localStorage.setItem(LS_KEY, v ? '1' : '0'); } catch (e) { /* storage blocked */ }
     if (v) {
       if (!window.__zcodeRtlObserver) start();
-      console.log('[ZCode RTL v34] enabled.');
+      console.log('[ZCode RTL v35] enabled.');
     } else {
       try { stripAll(); restoreArrows(); } catch (e) { /* nothing touched */ }
       stopObserver();
       window.__zcodeRtlProcess = null;
-      console.log('[ZCode RTL v34] disabled — styles stripped, no reload.');
+      console.log('[ZCode RTL v35] disabled — styles stripped, no reload.');
     }
   };
 
   if (!rtlEnabled()) {
-    console.log('[ZCode RTL v34] disabled (localStorage zcodeRtl:enabled=0). Enable with window.__zcodeRtlSetEnabled(true) or /rtl-fix on.');
+    console.log('[ZCode RTL v35] disabled (localStorage zcodeRtl:enabled=0). Enable with window.__zcodeRtlSetEnabled(true) or /rtl-fix on.');
     return;
   }
 
