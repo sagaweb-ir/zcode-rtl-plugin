@@ -30,7 +30,7 @@
 
 The payload self-heals while the model is streaming (debounced 200 ms rescan), so Persian text that appears mid-answer is corrected immediately.
 
-Compatible with ZCode 3.17+ (v0.7.1 fixed the update that wrapped the transcript in `data-zcode-chat-loading-slot` rows — the "code" substring inside "zcode" used to make the code detector lock the whole assistant chat LTR).
+Compatible with ZCode 3.17+ (v0.7.1 fixed the update that wrapped the transcript in `data-zcode-chat-loading-slot` rows — the "code" substring inside "zcode" used to make the code detector lock the whole assistant chat LTR; v0.8.0 restored the tool-block LTR lock on 3.17.1, whose removed marker rows had left Persian prose in tool/agent result blocks left-aligned).
 
 ## Requirements
 
