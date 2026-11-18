@@ -1,5 +1,19 @@
 /*
- * ZCode RTL fix v35 — Persian RTL + Vazirmatn font + scaled headings.
+ * ZCode RTL fix v36 — Persian RTL + Vazirmatn font + scaled headings.
+ *
+ * v36 (merge with upstream v32/v33): adopts two upstream repairs on top of
+ *   our v35. (1) STALE-STYLE SELF-HEAL: the pure-Latin branch no longer
+ *   returns early — it forces LTR and keeps descending, so descendants
+ *   carrying stale inline rtl (text streamed as Persian, or React reused
+ *   the node) are re-evaluated ~200 ms after any mutation instead of
+ *   freezing RTL mid-conversation. (2) TOKEN-LEVEL TABLE SCOPE: the v22
+ *   [class*="table" i] substring matched the 3.17.1 transcript scroll pane
+ *   itself ([--markdown-table-layout-*] CSS-variable utilities contain
+ *   "table"), putting every leaf of every message inside a phantom table
+ *   scope (RTL_TABLE ≈ RTL_FORCE masked it); inTableScope() now requires
+ *   "table" as a real class token with bracketed variants stripped. Our
+ *   features (Vazirmatn font, heading scale, arrow mirroring, reload-free
+ *   disable with TOUCHED/FLIPPED registries) ride on top unchanged.
  *
  * v35 (merge with upstream v31): adopts upstream's TOKEN-level CODE_TOKEN
  *   isCode() (delimited-token match + SVG className guard — subsumes our
@@ -154,7 +168,7 @@
  *   - sidebar (#sidebar, *sidebar*) -> COMPLETELY UNTOUCHED
  *   - debounced 200 ms rescan after streaming mutations
  */
-(function zcodeRtlFixV35() {
+(function zcodeRtlFixV36() {
   // Every element+property we set, so disable() can strip them without a
   // page reload (upstream v30).
   const TOUCHED = new Map();
@@ -232,6 +246,28 @@
     if (t === 'pre' || t === 'code') return true;
     const cls = typeof el.className === 'string' ? el.className : '';
     return CODE_TOKEN.test(cls);
+  }
+
+  // v36 (upstream v33): TOKEN-level table-scope detection. "table" must be a
+  // real class token (Tailwind display utilities table/table-row/table-cell,
+  // names like data-table-wrap) — NOT a substring. Arbitrary Tailwind
+  // variants in [...] brackets are stripped first: the 3.17.1 transcript
+  // scroll pane carries [--markdown-table-layout-*] CSS-variable utilities,
+  // so the old [class*="table" i] matched the pane itself and put EVERY leaf
+  // of every message inside a phantom table scope → RTL_TABLE
+  // (rtl/right/embed) on all-English paragraphs, fenced code blocks (3.17.x
+  // renders them without <pre>) and mono badges. Real <table> markup always
+  // counts.
+  const TABLE_TOKEN = /(?:^|[\s:._/,-])table(?:$|[\s:._/,-])/i;
+  function inTableScope(el) {
+    if (!el.closest) return false;
+    if (el.closest('table')) return true;
+    for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+      const cls = typeof n.className === 'string' ? n.className : '';
+      if (!cls || !/table/i.test(cls)) continue;
+      if (TABLE_TOKEN.test(cls.replace(/\[[^\]]*\]/g, ' '))) return true;
+    }
+    return false;
   }
 
   // Tool blocks (terminal / thinking / edit): the block CHROME (summary
@@ -464,23 +500,34 @@
     // the <td> branch never fires. Apply the same per-cell rule to any
     // near-leaf element inside a table scope — again BEFORE the pure-Latin
     // check, so Latin-valued pseudo-cells stay right-aligned like real ones.
-    const inTable = !isLayout && el.closest && el.closest('table,[class*="table" i]');
+    // v36: table-scope detection is TOKEN-level and bracket-aware (upstream
+    // v33) — the old [class*="table" i] substring matched the 3.17.1
+    // transcript scroll pane ITSELF ([--markdown-table-layout-*] CSS-variable
+    // utilities contain "table"), so every leaf of every message took the
+    // RTL_TABLE branch: rtl/right/embed on all-English content.
+    const inTable = !isLayout && inTableScope(el);
     if (inTable && !hasBlockChild(el)) {
       force(el, RTL_TABLE);
-    } else {
-      if (isPureLatin(text)) { force(el, LTR_TEXT); return; }
-      if (tag === 'ul' || tag === 'ol') {
-        // Reached only when NOT pure-Latin -> Persian/mixed list goes RTL so
-        // CSS-generated markers/numbers land on the right.
-        force(el, RTL_LIST);
-      } else if (tag === 'li') {
-        force(el, RTL_FORCE);
-      } else if (!isLayout) {
-        // Core rule, v25 edition: RTL by RATIO (>=20% Persian letters) —
-        // but NEVER on an element that contains the sidebar (layout wrapper):
-        // flipping those reorders the whole app layout.
-        force(el, (isPersianDominant(text) && !containsExcluded(el)) ? RTL_FORCE : NEUTRAL);
-      }
+    } else if (isPureLatin(text)) {
+      // v36 (upstream v32): NO early return any more. The old `return` pruned
+      // the walk at every pure-Latin container, so a descendant still
+      // carrying a stale inline rtl (styled while its text streamed as
+      // Persian, or after React reused the DOM node) was never revisited —
+      // fully-English paragraphs frozen RTL mid-conversation. Force LTR and
+      // KEEP DESCENDING: the next pass (~200 ms after any mutation)
+      // re-evaluates the subtree and heals stale styles.
+      force(el, LTR_TEXT);
+    } else if (tag === 'ul' || tag === 'ol') {
+      // Persian/mixed list goes RTL so CSS-generated markers/numbers land
+      // on the right.
+      force(el, RTL_LIST);
+    } else if (tag === 'li') {
+      force(el, RTL_FORCE);
+    } else if (!isLayout) {
+      // Core rule, v25 edition: RTL by RATIO (>=20% Persian letters) —
+      // but NEVER on an element that contains the sidebar (layout wrapper):
+      // flipping those reorders the whole app layout.
+      force(el, (isPersianDominant(text) && !containsExcluded(el)) ? RTL_FORCE : NEUTRAL);
     }
 
     const kids = el.children;
@@ -695,7 +742,7 @@
       window.__zcodeRtlObserver = obs;
     }
 
-    console.log('[ZCode RTL v35] applied (Persian text in Vazirmatn, scaled headings, mirrored arrows; 3.17.1 tool-block lock restored). Toggle: /rtl-fix off|on — reload-free both ways.');
+    console.log('[ZCode RTL v36] applied (Persian text in Vazirmatn, scaled headings, mirrored arrows; 3.17.1 tool-lock + token table scope + stale-RTL self-heal). Toggle: /rtl-fix off|on — reload-free both ways.');
   }
 
   // v29: persistent on/off switch. '0' in localStorage disables the layer.
@@ -736,17 +783,17 @@
     try { localStorage.setItem(LS_KEY, v ? '1' : '0'); } catch (e) { /* storage blocked */ }
     if (v) {
       if (!window.__zcodeRtlObserver) start();
-      console.log('[ZCode RTL v35] enabled.');
+      console.log('[ZCode RTL v36] enabled.');
     } else {
       try { stripAll(); restoreArrows(); } catch (e) { /* nothing touched */ }
       stopObserver();
       window.__zcodeRtlProcess = null;
-      console.log('[ZCode RTL v35] disabled — styles stripped, no reload.');
+      console.log('[ZCode RTL v36] disabled — styles stripped, no reload.');
     }
   };
 
   if (!rtlEnabled()) {
-    console.log('[ZCode RTL v35] disabled (localStorage zcodeRtl:enabled=0). Enable with window.__zcodeRtlSetEnabled(true) or /rtl-fix on.');
+    console.log('[ZCode RTL v36] disabled (localStorage zcodeRtl:enabled=0). Enable with window.__zcodeRtlSetEnabled(true) or /rtl-fix on.');
     return;
   }
 
